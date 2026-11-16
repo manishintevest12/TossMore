@@ -3,15 +3,38 @@
 // start the backend without a TypeScript loader.
 //
 // Usage: node scripts/build-server.mjs
-import { build } from 'esbuild';
+//
+// server.js is committed to the repo, so if esbuild is unavailable (for example
+// a host that installs production dependencies only) the build keeps the last
+// committed bundle instead of failing the whole deploy.
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const outfile = path.join(root, 'server.js');
 
-await build({
+let esbuild;
+try {
+  esbuild = await import('esbuild');
+} catch {
+  esbuild = null;
+}
+
+if (!esbuild) {
+  if (fs.existsSync(outfile)) {
+    console.warn(
+      '[build-server] esbuild is not installed; keeping the committed server.js. Install dev dependencies to rebuild it.',
+    );
+    process.exit(0);
+  }
+  console.error('[build-server] esbuild is not installed and no server.js exists. Run "npm install" first.');
+  process.exit(1);
+}
+
+await esbuild.build({
   entryPoints: [path.join(root, 'server.ts')],
-  outfile: path.join(root, 'server.js'),
+  outfile,
   bundle: true,
   platform: 'node',
   format: 'esm',

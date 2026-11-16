@@ -1,8 +1,9 @@
 import express from 'express';
+import fs from 'fs';
 import http from 'http';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
-import { createServer as createViteServer } from 'vite';
 import {
   loadState,
   saveState,
@@ -23,7 +24,7 @@ import {
   type TournamentVideo,
 } from './server/store.js';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 let appState: AppState = loadState();
 
 const app = express();
@@ -888,21 +889,39 @@ app.post('/api/tournament-videos', (req, res) => {
 });
 
 async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
+  // Resolve the build output relative to this file so the server works no
+  // matter which directory the host starts it from (local, Passenger, PM2...).
+  const appRoot = path.dirname(fileURLToPath(import.meta.url));
+  const distDir = path.resolve(appRoot, 'dist');
+  const hasBuiltClient = fs.existsSync(path.join(distDir, 'index.html'));
+  const isDev = process.env.NODE_ENV === 'development' || (!hasBuiltClient && process.env.NODE_ENV !== 'production');
+
+  if (isDev) {
+    // Loaded lazily so production starts without needing Vite installed.
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true, hmr: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
+    console.log('Serving client through the Vite dev middleware.');
   } else {
-    const distDir = path.resolve(process.cwd(), 'dist');
-    app.use(express.static(distDir));
-    app.get('*', (_req, res) => {
+    if (!hasBuiltClient) {
+      throw new Error(
+        `Client build not found at ${distDir}. Run "npm run build" before starting the server in production.`,
+      );
+    }
+    app.use(express.static(distDir, { index: false, maxAge: '1h' }));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/') || req.path === '/ws') {
+        next();
+        return;
+      }
       res.sendFile(path.join(distDir, 'index.html'));
     });
   }
 
-  server.listen(PORT, '0.0.0.0', () => {
+  server.listen(PORT, () => {
     console.log(`TossMore full-stack server running on http://localhost:${PORT}`);
   });
 }

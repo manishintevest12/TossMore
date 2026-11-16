@@ -1,0 +1,6 @@
+{
+  "name": "ApexArena — Athletic Training & Sports Ecosystem",
+  "description": "All-in-one athletic coaching, degree certification, VR/AR skill modules, wearable telemetry, tournament analytics, club management, scouting, and equipment marketplace.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
